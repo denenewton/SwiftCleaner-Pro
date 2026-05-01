@@ -1,0 +1,64 @@
+import Foundation
+
+@main
+struct swiftcleaner {
+
+    static func main() {
+        print("🚀 SwiftCleaner v1.0 - Modo Developer")
+
+        // Lista de alvos baseada na sua sugestão
+        let alvos = [
+            ("Lixeira", FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".Trash")),
+            ("Caches do Usuário", FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!),
+            ("Xcode DerivedData", FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Developer/Xcode/DerivedData")),
+            ("iOS DeviceSupport", FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Developer/Xcode/iOS DeviceSupport")),
+            ("Simuladores Caches", FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Developer/CoreSimulator/Caches")),
+            ("Swift Package Manager", FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches/org.swift.swiftpm"))
+        ]
+
+        for (nome, url) in alvos {
+            executarLimpeza(nome: nome, noCaminho: url)
+        }
+    }
+
+    static func executarLimpeza(nome: String, noCaminho url: URL) {
+        let fileManager = FileManager.default
+
+        // Verifica se a pasta existe antes de tentar qualquer coisa
+        guard fileManager.fileExists(atPath: url.path) else { return }
+
+        print("\n🔎 Analisando \(nome)...")
+
+        do {
+            let itens = try fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.fileSizeKey])
+
+            if itens.isEmpty {
+                print("✨ \(nome) já está limpa.")
+                return
+            }
+
+            let tamanhoTotalMb = calculaTamanhoMb(itens)
+            print("📦 \(itens.count) itens encontrados | \(String(format: "%.2f", tamanhoTotalMb)) MB")
+
+            print("❓ Limpar \(nome)? (s/n): ", terminator: "")
+
+            if let resposta = readLine()?.lowercased(), resposta == "s" {
+                for item in itens {
+                    try? fileManager.removeItem(at: item)
+                }
+                print("✅ \(nome) limpo com sucesso!")
+            }
+        } catch {
+            print("⚠️ Não foi possível ler \(nome): \(error.localizedDescription)")
+        }
+    }
+
+    static func calculaTamanhoMb(_ listaDeItens: [URL]) -> Double {
+        var tamanhoTotal: Int64 = 0
+        for item in listaDeItens {
+            let recursos = try? item.resourceValues(forKeys: [.fileSizeKey])
+            tamanhoTotal += Int64(recursos?.fileSize ?? 0)
+        }
+        return Double(tamanhoTotal) / 1024 / 1024
+    }
+}

@@ -1,0 +1,124 @@
+import Foundation
+
+@main
+struct swiftcleaner {
+    static func main() {
+        print("🔐 Verificando permissões de sistema...")
+
+        let antes = obterEspacoLivre()
+
+        print("🧹 Iniciando faxina pesada (Modo Interativo)...")
+
+        let alvos = [
+            ("Xcode DerivedData", "~/Library/Developer/Xcode/DerivedData"),
+            ("iOS DeviceSupport", "~/Library/Developer/Xcode/iOS DeviceSupport"),
+            ("Simuladores Caches", "~/Library/Developer/CoreSimulator/Caches"),
+            ("Swift Package Manager", "~/Library/Caches/org.swift.swiftpm"),
+            ("Homebrew Cache", "~/Library/Caches/Homebrew"), // Novo
+            ("Cargo (Rust) Registry", "~/.cargo/registry"), // Novo
+            ("Cargo (Rust) Git Cache", "~/.cargo/git"), // Novo
+            ("Caches do Usuário", "~/Library/Caches"),
+            ("Logs de Aplicativos", "~/Library/Logs"), // Novo
+            ("Caches de Sistema", "/Library/Caches"),
+            ("Logs de Sistema", "/private/var/log"),
+            ("Lixeira", "~/.Trash")
+        ]
+
+        for (nome, caminho) in alvos {
+            let pathExpandido = NSString(string: caminho).expandingTildeInPath
+            let url = URL(fileURLWithPath: pathExpandido)
+
+            analisarELimpar(nome: nome, url: url)
+        }
+
+        print("\n⚙️ Executando comandos de manutenção do sistema...")
+        executarComando(caminho: "/usr/bin/dscacheutil", argumentos: ["-flushcache"])
+        executarComando(caminho: "/usr/sbin/periodic", argumentos: ["daily", "weekly", "monthly"])
+
+        let brewPath = "/usr/local/bin/brew"
+
+        if FileManager.default.fileExists(atPath: brewPath) {
+            print("🍺 Limpando Homebrew...")
+            executarComando(caminho: brewPath, argumentos: ["cleanup", "-s"])
+        } else {
+            print("ℹ️ Homebrew não detectado. Pulando limpeza de fórmulas.")
+        }
+
+        let depois = obterEspacoLivre()
+        exibirResultado(antes: antes, depois: depois)
+    }
+
+    static func analisarELimpar(nome: String, url: URL) {
+        let fm = FileManager.default
+
+        guard fm.fileExists(atPath: url.path) else { return }
+
+        // 1. Calcula o tamanho real (recursivo) antes de tudo
+        let tamanhoBytes = calculaTamanhoTotalReal(no: url)
+
+        if tamanhoBytes == 0 {
+            print("✨ \(nome) já está limpa.")
+            return
+        }
+
+        let tamanhoMb = Double(tamanhoBytes) / 1024 / 1024
+
+        print("\n🔎 Alvo: \(nome)")
+        print(String(format: "📊 Espaço ocupado: %.2f MB", tamanhoMb))
+        print("❓ Deseja limpar esta pasta? (s/n): ", terminator: "")
+
+        if let resposta = readLine()?.lowercased(), resposta == "s" {
+            // Pegamos os itens imediatos para deletar o conteúdo
+            if let itens = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) {
+                for item in itens {
+                    try? fm.removeItem(at: item)
+                }
+                print("✅ \(nome) processado.")
+            }
+        } else {
+            print("⏭️ Ignorado.")
+        }
+    }
+
+    // --- CÁLCULO RECURSIVO (PROFUNDO) ---
+    static func calculaTamanhoTotalReal(no caminho: URL) -> Int64 {
+        let fm = FileManager.default
+        // O enumerator entra em todas as subpastas
+        guard let enumerator = fm.enumerator(at: caminho, includingPropertiesForKeys: [.fileSizeKey], options: [.skipsHiddenFiles]) else { return 0 }
+
+        var total: Int64 = 0
+        for case let fileURL as URL in enumerator {
+            let recursos = try? fileURL.resourceValues(forKeys: [.fileSizeKey])
+            total += Int64(recursos?.fileSize ?? 0)
+        }
+        return total
+    }
+
+    static func obterEspacoLivre() -> Int64 {
+        let url = URL(fileURLWithPath: NSHomeDirectory())
+        let valores = try? url.resourceValues(forKeys: [.volumeAvailableCapacityKey])
+        return Int64(valores?.volumeAvailableCapacity ?? 0)
+    }
+
+    static func executarComando(caminho: String, argumentos: [String]) {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: caminho)
+        task.arguments = argumentos
+        try? task.run()
+        task.waitUntilExit()
+    }
+
+    static func exibirResultado(antes: Int64, depois: Int64) {
+        let diff = depois - antes
+        if diff <= 0 {
+            print("\n✨ O sistema já estava limpo ou o APFS ainda está processando a liberação.")
+        } else {
+            let mb = Double(diff) / 1_048_576
+            if mb >= 1024 {
+                print(String(format: "\n✅ Faxina concluída! Você recuperou %.2f GB.", mb / 1024))
+            } else {
+                print(String(format: "\n✅ Faxina concluída! Você recuperou %.2f MB.", mb))
+            }
+        }
+    }
+}

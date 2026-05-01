@@ -1,0 +1,81 @@
+import Foundation
+
+@main
+struct swiftcleaner {
+
+    static func main() {
+        print("🚀 SwiftCleaner v1.0")
+        processarLixeira()
+        processarCaches()
+    }
+
+    static func calculaTamanhoMb(_ listaDeItens: [URL]) -> Double {
+        var tamanhoTotal: Int64 = 0
+        for item in listaDeItens {
+            // O 'try?' retorna nulo se falhar, e o '?' acessa a propriedade com segurança
+            let recursos = try? item.resourceValues(forKeys: [.fileSizeKey])
+            tamanhoTotal += Int64(recursos?.fileSize ?? 0)
+        }
+        return Double(tamanhoTotal) / 1024 / 1024
+    }
+
+    static func processarCaches() {
+        let fileManager = FileManager.default
+
+        // Localiza ~/Library/Caches de forma segura
+        guard let cacheURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            print("❌ Não foi possível acessar a pasta de caches.")
+            return
+        }
+
+        print("\n⚙️ Analisando Caches do Usuário...")
+
+        do {
+            let items = try fileManager.contentsOfDirectory(at: cacheURL, includingPropertiesForKeys: [.fileSizeKey])
+            let tamanhoTotalMb = calculaTamanhoMb(items)
+
+            print("📦 Existem \(items.count) itens de cache ocupando \(String(format: "%.2f", tamanhoTotalMb)) MB")
+            print("❓ Deseja apagar todos os caches? (s/n): ", terminator: "")
+
+            if let resposta = readLine()?.lowercased(), resposta == "s" {
+                for item in items {
+                    // Usamos try? aqui porque arquivos em uso não podem ser apagados
+                    try? fileManager.removeItem(at: item)
+                }
+                print("✅ Limpeza de caches finalizada!")
+            }
+        } catch {
+            print("❌ Erro ao ler pasta de cache: \(error.localizedDescription)")
+        }
+    }
+
+    static func processarLixeira() {
+        let fileManager = FileManager.default
+        let lixeiraURL = fileManager.homeDirectoryForCurrentUser.appendingPathComponent(".Trash")
+
+        do {
+            let itens = try fileManager.contentsOfDirectory(at: lixeiraURL, includingPropertiesForKeys: [.fileSizeKey])
+
+            if itens.isEmpty {
+                print("✨ A lixeira já está limpa!")
+                return
+            }
+
+            let tamanhoTotalMb = calculaTamanhoMb(itens)
+            print("\n📊 A lixeira contém \(itens.count) itens ocupando \(String(format: "%.2f", tamanhoTotalMb)) MB.")
+            print("❓ Deseja apagar permanentemente? (s/n): ", terminator: "")
+
+            if let resposta = readLine()?.lowercased(), resposta == "s" {
+                print("🗑️ Apagando arquivos...")
+                for item in itens {
+                    try? fileManager.removeItem(at: item)
+                }
+                print("✅ Tudo limpo!")
+            } else {
+                print("❌ Operação cancelada.")
+            }
+        } catch {
+            print("❌ Erro na lixeira: \(error.localizedDescription)")
+        }
+    }
+}
